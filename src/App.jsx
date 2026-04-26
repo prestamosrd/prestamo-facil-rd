@@ -95,7 +95,12 @@ function App() {
     ));
   };
 
-  // 🔥 NUEVO: RECIBO POR WHATSAPP
+  const eliminar = (id) => {
+    if (confirm("¿Seguro que deseas eliminar este préstamo?")) {
+      setClientes(clientes.filter(c => c.id !== id));
+    }
+  };
+
   const whatsapp = (cliente) => {
     const data = calcularMora(cliente);
     const pagado = cliente.pagado * cliente.pagoSemanal;
@@ -155,6 +160,9 @@ function App() {
 
             <button onClick={() => pagar(c.id)}>Pagar cuota</button>
             <button onClick={() => whatsapp(c)}>Enviar recibo</button>
+            <button onClick={() => eliminar(c.id)} style={{ background: "#dc2626" }}>
+              Eliminar
+            </button>
           </div>
         );
       })}
