@@ -1,9 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-const CLAVE_APP = "1234"; // Cambia esta clave por la tuya
+const CONFIG_DEFAULT = {
+  nombreApp: "Préstamos E & F",
+  clave: "1234"
+};
 
 function App() {
+  const [config, setConfig] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("configPrestamos") || JSON.stringify(CONFIG_DEFAULT));
+    } catch {
+      return CONFIG_DEFAULT;
+    }
+  });
+  const [mostrarConfig, setMostrarConfig] = useState(false);
+  const [nuevaClave, setNuevaClave] = useState("");
+  const [nuevoNombreApp, setNuevoNombreApp] = useState("");
+
   const [autenticado, setAutenticado] = useState(() => {
     return sessionStorage.getItem("prestamoLogin") === "si";
   });
@@ -43,11 +57,15 @@ function App() {
   }, [clientes]);
 
   useEffect(() => {
+    localStorage.setItem("configPrestamos", JSON.stringify(config));
+  }, [config]);
+
+  useEffect(() => {
     localStorage.setItem("papeleraPrestamos", JSON.stringify(papelera));
   }, [papelera]);
 
   const entrar = () => {
-    if (clave === CLAVE_APP) {
+    if (clave === config.clave) {
       sessionStorage.setItem("prestamoLogin", "si");
       setAutenticado(true);
     } else {
@@ -59,6 +77,22 @@ function App() {
     sessionStorage.removeItem("prestamoLogin");
     setAutenticado(false);
     setClave("");
+  };
+
+  const guardarConfiguracion = () => {
+    const nombreFinal = nuevoNombreApp.trim() || config.nombreApp;
+    const claveFinal = nuevaClave.trim() || config.clave;
+
+    if (claveFinal.length < 4) {
+      alert("La contraseña debe tener mínimo 4 caracteres.");
+      return;
+    }
+
+    setConfig({ nombreApp: nombreFinal, clave: claveFinal });
+    setNuevoNombreApp("");
+    setNuevaClave("");
+    setMostrarConfig(false);
+    alert("Configuración guardada correctamente.");
   };
 
   const dinero = (valor) =>
@@ -308,11 +342,11 @@ Favor realizar su pago. Gracias.`;
     return (
       <div className="loginPage">
         <div className="loginBox">
-          <h1>Préstamo Fácil PRO</h1>
+          <h1>{config.nombreApp}</h1>
           <p>Ingrese la contraseña para acceder.</p>
           <input type="password" placeholder="Contraseña" value={clave} onChange={e => setClave(e.target.value)} onKeyDown={e => e.key === "Enter" && entrar()} />
           <button onClick={entrar}>Entrar</button>
-          <small>Clave inicial: 1234. Puedes cambiarla en el código.</small>
+          <small>Clave inicial: 1234. Luego puedes cambiarla desde Configuración.</small>
         </div>
         <style>{estilos}</style>
       </div>
@@ -360,14 +394,37 @@ Favor realizar su pago. Gracias.`;
     <div className="app">
       <header className="header">
         <div>
-          <h1>Préstamo Fácil PRO</h1>
+          <h1>{config.nombreApp}</h1>
           <p>Control de préstamos, cuotas, mora automática y WhatsApp.</p>
         </div>
         <div className="headerBtns">
           <button className="papeleraBtn" onClick={() => setVerPapelera(true)}>Papelera ({papelera.length})</button>
+          <div className="headerBtns">
+          <button className="configBtn" onClick={() => setMostrarConfig(!mostrarConfig)}>Config</button>
           <button className="salir" onClick={salir}>Salir</button>
         </div>
+        </div>
       </header>
+      {mostrarConfig && (
+        <section className="card configPanel">
+          <h2>⚙️ Configuración</h2>
+          <label>Nombre de la app</label>
+          <input
+            placeholder={config.nombreApp}
+            value={nuevoNombreApp}
+            onChange={e => setNuevoNombreApp(e.target.value)}
+          />
+          <label>Nueva contraseña</label>
+          <input
+            type="password"
+            placeholder="Escribe una nueva contraseña"
+            value={nuevaClave}
+            onChange={e => setNuevaClave(e.target.value)}
+          />
+          <button onClick={guardarConfiguracion}>Guardar configuración</button>
+          <p className="notaConfig">Si dejas un campo vacío, se conserva el valor actual.</p>
+        </section>
+      )}
 
       {(resumen.pagosHoy > 0 || resumen.atrasados > 0) && (
         <section className="alerta">
