@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
+const CLAVE_APP = "1234"; // Cambia esta clave por la tuya
+
 function App() {
+  const [autenticado, setAutenticado] = useState(() => {
+    return sessionStorage.getItem("prestamoLogin") === "si";
+  });
+  const [clave, setClave] = useState("");
+
   const [clientes, setClientes] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("clientesPrestamos") || "[]");
@@ -25,6 +32,21 @@ function App() {
   useEffect(() => {
     localStorage.setItem("clientesPrestamos", JSON.stringify(clientes));
   }, [clientes]);
+
+  const entrar = () => {
+    if (clave === CLAVE_APP) {
+      sessionStorage.setItem("prestamoLogin", "si");
+      setAutenticado(true);
+    } else {
+      alert("Clave incorrecta");
+    }
+  };
+
+  const salir = () => {
+    sessionStorage.removeItem("prestamoLogin");
+    setAutenticado(false);
+    setClave("");
+  };
 
   const dinero = (valor) =>
     new Intl.NumberFormat("es-DO", {
@@ -69,6 +91,7 @@ function App() {
     const pendienteTotal = saldoSinMora + moraTotal;
     const proximaCuotaNumero = cuotasPagadas < cliente.cuotas ? cuotasPagadas + 1 : cliente.cuotas;
     const proximaFecha = cuotasPagadas < cliente.cuotas ? fechaCuota(cliente.fechaInicio, proximaCuotaNumero) : "Saldado";
+    const pagaHoy = proximaFecha === hoyISO() && pendienteTotal > 0;
 
     return {
       pagado,
@@ -79,7 +102,8 @@ function App() {
       cuotasAtrasadas,
       diasAtrasados,
       proximaCuotaNumero,
-      proximaFecha
+      proximaFecha,
+      pagaHoy
     };
   };
 
@@ -159,6 +183,12 @@ function App() {
     abrirWhatsApp(cliente.telefono, mensaje);
   };
 
+  const enviarRecordatorioHoy = (cliente) => {
+    const data = calcular(cliente);
+    const mensaje = `⏰ *RECORDATORIO DE PAGO*\n\nHola ${cliente.nombre}, hoy le corresponde realizar su pago.\n\n💵 Cuota de hoy: ${dinero(cliente.pagoSemanal)}\n📅 Fecha: ${hoyISO()}\n📉 Balance pendiente: ${dinero(data.pendienteTotal)}\n\nGracias.`;
+    abrirWhatsApp(cliente.telefono, mensaje);
+  };
+
   const enviarRecibo = (cliente) => {
     const data = calcular(cliente);
     const mensaje = `🧾 *RECIBO DE PAGO*\n\n👤 Cliente: ${cliente.nombre}\n📞 Teléfono: ${cliente.telefono}\n\n💰 Monto prestado: ${dinero(cliente.monto)}\n📊 Total del préstamo: ${dinero(cliente.total)}\n💵 Valor de cuota: ${dinero(cliente.pagoSemanal)}\n✅ Cuotas pagadas: ${cliente.pagado}/${cliente.cuotas}\n\n⚠️ Mora acumulada: ${dinero(data.moraTotal)}\n📉 Balance pendiente: ${dinero(data.pendienteTotal)}\n\n🙏 Gracias por su pago.`;
@@ -179,24 +209,90 @@ function App() {
       acc.mora += data.moraTotal;
       acc.pendiente += data.pendienteTotal;
       acc.atrasados += data.cuotasAtrasadas > 0 ? 1 : 0;
+      acc.pagosHoy += data.pagaHoy ? 1 : 0;
       return acc;
-    }, { prestado: 0, total: 0, pagado: 0, mora: 0, pendiente: 0, atrasados: 0 });
+    }, { prestado: 0, total: 0, pagado: 0, mora: 0, pendiente: 0, atrasados: 0, pagosHoy: 0 });
   }, [clientes]);
+
+  const pagosHoy = clientes.filter(c => calcular(c).pagaHoy);
+  const atrasados = clientes.filter(c => calcular(c).cuotasAtrasadas > 0);
+
+  if (!autenticado) {
+    return (
+      <div className="loginPage">
+        <div className="loginBox">
+          <h1>Préstamo Fácil PRO</h1>
+          <p>Ingrese la contraseña para acceder.</p>
+          <input type="password" placeholder="Contraseña" value={clave} onChange={e => setClave(e.target.value)} onKeyDown={e => e.key === "Enter" && entrar()} />
+          <button onClick={entrar}>Entrar</button>
+          <small>Clave inicial: 1234. Puedes cambiarla en el código.</small>
+        </div>
+        <style>{estilos}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
       <header className="header">
-        <h1>Préstamo Fácil PRO</h1>
-        <p>Control de préstamos, cuotas, mora automática y WhatsApp.</p>
+        <div>
+          <h1>Préstamo Fácil PRO</h1>
+          <p>Control de préstamos, cuotas, mora automática y WhatsApp.</p>
+        </div>
+        <button className="salir" onClick={salir}>Salir</button>
       </header>
+
+      {(resumen.pagosHoy > 0 || resumen.atrasados > 0) && (
+        <section className="alerta">
+          <h2>🔔 Alertas de cobro</h2>
+          <p>Hoy tienen pago: <b>{resumen.pagosHoy}</b> cliente(s).</p>
+          <p>Clientes atrasados: <b>{resumen.atrasados}</b>.</p>
+        </section>
+      )}
+
+      {pagosHoy.length > 0 && (
+        <section className="card">
+          <h2>⏰ Pagos de hoy</h2>
+          {pagosHoy.map(c => {
+            const data = calcular(c);
+            return (
+              <div key={c.id} className="miniFila">
+                <div>
+                  <b>{c.nombre}</b>
+                  <p>{dinero(c.pagoSemanal)} vence hoy</p>
+                </div>
+                <button className="verdeBtn miniBtn" onClick={() => enviarRecordatorioHoy(c)}>Recordar</button>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {atrasados.length > 0 && (
+        <section className="card atrasosBox">
+          <h2>🚨 Clientes atrasados</h2>
+          {atrasados.map(c => {
+            const data = calcular(c);
+            return (
+              <div key={c.id} className="miniFila">
+                <div>
+                  <b>{c.nombre}</b>
+                  <p>{data.diasAtrasados} día(s) atrasado(s) - Mora: {dinero(data.moraTotal)}</p>
+                </div>
+                <button className="azulBtn miniBtn" onClick={() => enviarCobro(c)}>Cobrar</button>
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       <section className="grid resumen">
         <Box titulo="Clientes" valor={clientes.length} />
+        <Box titulo="Pagos hoy" valor={resumen.pagosHoy} />
         <Box titulo="Prestado" valor={dinero(resumen.prestado)} />
         <Box titulo="Pagado" valor={dinero(resumen.pagado)} />
         <Box titulo="Mora" valor={dinero(resumen.mora)} />
         <Box titulo="Pendiente" valor={dinero(resumen.pendiente)} />
-        <Box titulo="Atrasados" valor={resumen.atrasados} />
       </section>
 
       <section className="card">
@@ -236,7 +332,7 @@ function App() {
 
       {clientesFiltrados.map(cliente => {
         const data = calcular(cliente);
-        const estado = data.pendienteTotal <= 0 ? "Saldado" : data.cuotasAtrasadas > 0 ? "Atrasado" : "Al día";
+        const estado = data.pendienteTotal <= 0 ? "Saldado" : data.cuotasAtrasadas > 0 ? "Atrasado" : data.pagaHoy ? "Pago hoy" : "Al día";
 
         return (
           <section key={cliente.id} className="card cliente">
@@ -245,7 +341,7 @@ function App() {
                 <h2>{cliente.nombre}</h2>
                 <p>📞 {cliente.telefono}</p>
               </div>
-              <span className={estado === "Atrasado" ? "rojo" : "verde"}>{estado}</span>
+              <span className={estado === "Atrasado" ? "rojo" : estado === "Pago hoy" ? "amarillo" : "verde"}>{estado}</span>
             </div>
 
             <div className="datos">
@@ -263,46 +359,15 @@ function App() {
 
             <button onClick={() => marcarPago(cliente.id)}>Marcar cuota pagada</button>
             <button onClick={() => quitarPago(cliente.id)} className="gris">Quitar último pago</button>
-            <button onClick={() => enviarCobro(cliente)} className="verdeBtn">Cobrar por WhatsApp</button>
+            <button onClick={() => enviarRecordatorioHoy(cliente)} className="verdeBtn">Recordatorio por WhatsApp</button>
+            <button onClick={() => enviarCobro(cliente)} className="azulBtn">Cobrar por WhatsApp</button>
             <button onClick={() => enviarRecibo(cliente)} className="azulBtn">Enviar recibo por WhatsApp</button>
             <button onClick={() => eliminar(cliente.id)} className="rojoBtn">Eliminar préstamo</button>
           </section>
         );
       })}
 
-      <style>{`
-        * { box-sizing: border-box; }
-        body { margin: 0; }
-        .app { min-height: 100vh; background: #f1f5f9; padding: 16px; font-family: Arial, sans-serif; color: #0f172a; }
-        .header { background: linear-gradient(135deg, #7f1d1d, #111827); color: white; padding: 20px; border-radius: 22px; margin-bottom: 14px; }
-        .header h1 { margin: 0; font-size: 26px; }
-        .header p { margin: 6px 0 0; color: #e5e7eb; }
-        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .box, .card { background: white; border-radius: 18px; padding: 14px; box-shadow: 0 1px 5px rgba(0,0,0,.08); }
-        .box small { color: #64748b; }
-        .box h3 { margin: 5px 0 0; font-size: 17px; }
-        .card { margin-top: 14px; }
-        label { display: block; font-size: 13px; font-weight: bold; color: #334155; margin-top: 10px; }
-        input { width: 100%; padding: 13px; border-radius: 13px; border: 1px solid #cbd5e1; margin-top: 5px; font-size: 16px; }
-        .buscar { margin-top: 14px; }
-        .preview { background: #f8fafc; padding: 12px; border-radius: 14px; margin-top: 12px; }
-        .preview p, .datos p { margin: 7px 0; }
-        button { width: 100%; padding: 13px; border: 0; border-radius: 13px; margin-top: 8px; background: #7f1d1d; color: white; font-weight: bold; font-size: 15px; }
-        .gris { background: #475569; }
-        .verdeBtn { background: #16a34a; }
-        .azulBtn { background: #2563eb; }
-        .rojoBtn { background: #dc2626; }
-        .clienteTop { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-        .cliente h2 { margin: 0; }
-        .clienteTop p { margin: 5px 0 0; color: #64748b; }
-        .verde, .rojo { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; color: white; }
-        .verde { background: #16a34a; }
-        .rojo { background: #dc2626; }
-        @media (min-width: 700px) {
-          .app { max-width: 900px; margin: auto; }
-          .grid { grid-template-columns: repeat(3, 1fr); }
-        }
-      `}</style>
+      <style>{estilos}</style>
     </div>
   );
 }
@@ -315,5 +380,52 @@ function Box({ titulo, valor }) {
     </div>
   );
 }
+
+const estilos = `
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .app { min-height: 100vh; background: #f1f5f9; padding: 16px; font-family: Arial, sans-serif; color: #0f172a; }
+  .header { background: linear-gradient(135deg, #7f1d1d, #111827); color: white; padding: 20px; border-radius: 22px; margin-bottom: 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .header h1 { margin: 0; font-size: 26px; }
+  .header p { margin: 6px 0 0; color: #e5e7eb; }
+  .salir { width: auto; padding: 9px 13px; background: #334155; margin-top: 0; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .box, .card { background: white; border-radius: 18px; padding: 14px; box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+  .box small { color: #64748b; }
+  .box h3 { margin: 5px 0 0; font-size: 17px; }
+  .card { margin-top: 14px; }
+  .alerta { background: #fff7ed; border: 1px solid #fdba74; padding: 14px; border-radius: 18px; margin-bottom: 14px; }
+  .alerta h2 { margin-top: 0; }
+  .atrasosBox { border: 1px solid #fecaca; }
+  .miniFila { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #e2e8f0; }
+  .miniFila:first-of-type { border-top: none; }
+  .miniFila p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
+  .miniBtn { width: auto; min-width: 90px; padding: 9px 11px; margin-top: 0; }
+  label { display: block; font-size: 13px; font-weight: bold; color: #334155; margin-top: 10px; }
+  input { width: 100%; padding: 13px; border-radius: 13px; border: 1px solid #cbd5e1; margin-top: 5px; font-size: 16px; }
+  .buscar { margin-top: 14px; }
+  .preview { background: #f8fafc; padding: 12px; border-radius: 14px; margin-top: 12px; }
+  .preview p, .datos p { margin: 7px 0; }
+  button { width: 100%; padding: 13px; border: 0; border-radius: 13px; margin-top: 8px; background: #7f1d1d; color: white; font-weight: bold; font-size: 15px; }
+  .gris { background: #475569; }
+  .verdeBtn { background: #16a34a; }
+  .azulBtn { background: #2563eb; }
+  .rojoBtn { background: #dc2626; }
+  .clienteTop { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .cliente h2 { margin: 0; }
+  .clienteTop p { margin: 5px 0 0; color: #64748b; }
+  .verde, .rojo, .amarillo { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; color: white; white-space: nowrap; }
+  .verde { background: #16a34a; }
+  .rojo { background: #dc2626; }
+  .amarillo { background: #ca8a04; }
+  .loginPage { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0f172a; padding: 20px; font-family: Arial, sans-serif; }
+  .loginBox { background: white; max-width: 420px; width: 100%; padding: 22px; border-radius: 22px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  .loginBox h1 { margin-top: 0; }
+  .loginBox small { display: block; margin-top: 12px; color: #64748b; }
+  @media (min-width: 700px) {
+    .app { max-width: 900px; margin: auto; }
+    .grid { grid-template-columns: repeat(3, 1fr); }
+  }
+`;
 
 createRoot(document.getElementById("root")).render(<App />);
