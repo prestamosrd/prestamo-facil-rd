@@ -44,21 +44,17 @@ function App() {
     const saldoPendiente = Math.max(cliente.total - pagado, 0);
 
     let moraTotal = 0;
-    let diasTotal = 0;
-    let cuotasAtrasadas = 0;
 
     for (let i = cliente.pagado + 1; i <= cliente.cuotas; i++) {
       const vencimiento = fechaCuota(cliente.fechaInicio, i);
       const dias = diasEntre(vencimiento, hoy);
 
       if (dias > 0 && saldoPendiente > 0) {
-        cuotasAtrasadas++;
-        diasTotal += dias;
         moraTotal += dias * (saldoPendiente * (cliente.mora / 100));
       }
     }
 
-    return { moraTotal, diasTotal, cuotasAtrasadas, saldoPendiente };
+    return { moraTotal, saldoPendiente };
   };
 
   const guardar = () => {
@@ -68,22 +64,13 @@ function App() {
     }
 
     const monto = Number(form.monto);
-    const cuotas = Number(form.cuotas);
-    const ganancia = Number(form.ganancia);
-    const mora = Number(form.mora);
-
-    const total = monto * (1 + ganancia / 100);
-    const pagoSemanal = total / cuotas;
+    const total = monto * (1 + form.ganancia / 100);
+    const pagoSemanal = total / form.cuotas;
 
     const nuevo = {
       id: Date.now(),
-      nombre: form.nombre,
-      telefono: form.telefono,
+      ...form,
       monto,
-      cuotas,
-      ganancia,
-      mora,
-      fechaInicio: form.fechaInicio,
       total,
       pagoSemanal,
       pagado: 0
@@ -108,6 +95,7 @@ function App() {
     ));
   };
 
+  // 🔥 NUEVO: RECIBO POR WHATSAPP
   const whatsapp = (cliente) => {
     const data = calcularMora(cliente);
     const pagado = cliente.pagado * cliente.pagoSemanal;
@@ -122,14 +110,14 @@ function App() {
 👤 Cliente: ${cliente.nombre}
 📞 Teléfono: ${cliente.telefono}
 
-💰 Monto prestado: ${dinero(cliente.monto)}
-📊 Total sin mora: ${dinero(cliente.total)}
+💰 Monto: ${dinero(cliente.monto)}
+📊 Total: ${dinero(cliente.total)}
 
-💵 Cuota semanal: ${dinero(cliente.pagoSemanal)}
+💵 Cuota: ${dinero(cliente.pagoSemanal)}
 ✅ Pagadas: ${cliente.pagado}/${cliente.cuotas}
 
-⚠️ Mora acumulada: ${dinero(data.moraTotal)}
-📉 Saldo pendiente: ${dinero(pendiente)}
+⚠️ Mora: ${dinero(data.moraTotal)}
+📉 Pendiente: ${dinero(pendiente)}
 
 🙏 Gracias por su pago.`
     );
@@ -139,7 +127,7 @@ function App() {
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
-      <h1>Préstamo Fácil PRO</h1>
+      <h1>Préstamo Fácil</h1>
 
       <h2>Nuevo préstamo</h2>
       <input placeholder="Nombre" value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}/>
@@ -148,7 +136,9 @@ function App() {
       <input placeholder="Cuotas" type="number" value={form.cuotas} onChange={e => setForm({...form, cuotas: e.target.value})}/>
       <input placeholder="% Ganancia" type="number" value={form.ganancia} onChange={e => setForm({...form, ganancia: e.target.value})}/>
       <input placeholder="% Mora diaria" type="number" value={form.mora} onChange={e => setForm({...form, mora: e.target.value})}/>
-      <button onClick={guardar}>Guardar</button>
+      <input type="date" value={form.fechaInicio} onChange={e => setForm({...form, fechaInicio: e.target.value})}/>
+      
+      <button onClick={guardar}>Guardar préstamo</button>
 
       {clientes.map(c => {
         const data = calcularMora(c);
