@@ -8,10 +8,19 @@ function App() {
     return sessionStorage.getItem("prestamoLogin") === "si";
   });
   const [clave, setClave] = useState("");
+  const [verPapelera, setVerPapelera] = useState(false);
 
   const [clientes, setClientes] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("clientesPrestamos") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const [papelera, setPapelera] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("papeleraPrestamos") || "[]");
     } catch {
       return [];
     }
@@ -32,6 +41,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("clientesPrestamos", JSON.stringify(clientes));
   }, [clientes]);
+
+  useEffect(() => {
+    localStorage.setItem("papeleraPrestamos", JSON.stringify(papelera));
+  }, [papelera]);
 
   const entrar = () => {
     if (clave === CLAVE_APP) {
@@ -154,20 +167,57 @@ function App() {
   };
 
   const marcarPago = (id) => {
+    const cliente = clientes.find(c => c.id === id);
+    if (!cliente) return;
+    if (!confirm(`¿Confirmas marcar una cuota pagada para ${cliente.nombre}?`)) return;
+
     setClientes(clientes.map(c =>
       c.id === id ? { ...c, pagado: Math.min(Number(c.pagado || 0) + 1, Number(c.cuotas || 0)) } : c
     ));
   };
 
   const quitarPago = (id) => {
+    const cliente = clientes.find(c => c.id === id);
+    if (!cliente) return;
+    if (!confirm(`¿Confirmas quitar el último pago registrado de ${cliente.nombre}?`)) return;
+
     setClientes(clientes.map(c =>
       c.id === id ? { ...c, pagado: Math.max(Number(c.pagado || 0) - 1, 0) } : c
     ));
   };
 
-  const eliminar = (id) => {
-    if (confirm("¿Seguro que deseas eliminar este préstamo?")) {
+  const enviarAPapelera = (id) => {
+    const cliente = clientes.find(c => c.id === id);
+    if (!cliente) return;
+
+    if (confirm("¿Mover este préstamo a la papelera? Podrás recuperarlo después.")) {
+      const eliminado = { ...cliente, eliminadoEn: new Date().toISOString() };
+      setPapelera([eliminado, ...papelera]);
       setClientes(clientes.filter(c => c.id !== id));
+    }
+  };
+
+  const restaurarPrestamo = (id) => {
+    const cliente = papelera.find(c => c.id === id);
+    if (!cliente) return;
+    if (!confirm(`¿Confirmas restaurar el préstamo de ${cliente.nombre}?`)) return;
+
+    const restaurado = { ...cliente };
+    delete restaurado.eliminadoEn;
+
+    setClientes([restaurado, ...clientes]);
+    setPapelera(papelera.filter(c => c.id !== id));
+  };
+
+  const borrarDefinitivo = (id) => {
+    if (confirm("¿Seguro que deseas borrar definitivamente? Esta acción no se puede deshacer.")) {
+      setPapelera(papelera.filter(c => c.id !== id));
+    }
+  };
+
+  const vaciarPapelera = () => {
+    if (confirm("¿Vaciar toda la papelera definitivamente?")) {
+      setPapelera([]);
     }
   };
 
@@ -177,21 +227,58 @@ function App() {
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, "_blank");
   };
 
-  const enviarCobro = (cliente) => {
+  // Recordatorio: mensaje suave cuando la cuota vence hoy.
+  const enviarRecordatorioHoy = (cliente) => {
+    if (!confirm(`¿Enviar recordatorio de pago por WhatsApp a ${cliente.nombre}?`)) return;
+
     const data = calcular(cliente);
-    const mensaje = `📌 *AVISO DE COBRO*\n\n👤 Cliente: ${cliente.nombre}\n💵 Cuota semanal: ${dinero(cliente.pagoSemanal)}\n📅 Próxima cuota: ${data.proximaFecha}\n⚠️ Mora acumulada: ${dinero(data.moraTotal)}\n📉 Balance pendiente: ${dinero(data.pendienteTotal)}\n\nFavor realizar su pago. Gracias.`;
+    const mensaje = `⏰ *RECORDATORIO DE PAGO*
+
+Hola ${cliente.nombre}, hoy le corresponde realizar su pago.
+
+💵 Cuota de hoy: ${dinero(cliente.pagoSemanal)}
+📅 Fecha: ${hoyISO()}
+📉 Balance pendiente: ${dinero(data.pendienteTotal)}
+
+Gracias.`;
     abrirWhatsApp(cliente.telefono, mensaje);
   };
 
-  const enviarRecordatorioHoy = (cliente) => {
+  // Cobro: mensaje más directo para balance pendiente, mora o atraso.
+  const enviarCobro = (cliente) => {
+    if (!confirm(`¿Enviar aviso de cobro por WhatsApp a ${cliente.nombre}?`)) return;
+
     const data = calcular(cliente);
-    const mensaje = `⏰ *RECORDATORIO DE PAGO*\n\nHola ${cliente.nombre}, hoy le corresponde realizar su pago.\n\n💵 Cuota de hoy: ${dinero(cliente.pagoSemanal)}\n📅 Fecha: ${hoyISO()}\n📉 Balance pendiente: ${dinero(data.pendienteTotal)}\n\nGracias.`;
+    const mensaje = `📌 *AVISO DE COBRO*
+
+👤 Cliente: ${cliente.nombre}
+💵 Cuota semanal: ${dinero(cliente.pagoSemanal)}
+📅 Próxima cuota: ${data.proximaFecha}
+⚠️ Mora acumulada: ${dinero(data.moraTotal)}
+📉 Balance pendiente: ${dinero(data.pendienteTotal)}
+
+Favor realizar su pago. Gracias.`;
     abrirWhatsApp(cliente.telefono, mensaje);
   };
 
   const enviarRecibo = (cliente) => {
+    if (!confirm(`¿Enviar recibo de pago por WhatsApp a ${cliente.nombre}?`)) return;
+
     const data = calcular(cliente);
-    const mensaje = `🧾 *RECIBO DE PAGO*\n\n👤 Cliente: ${cliente.nombre}\n📞 Teléfono: ${cliente.telefono}\n\n💰 Monto prestado: ${dinero(cliente.monto)}\n📊 Total del préstamo: ${dinero(cliente.total)}\n💵 Valor de cuota: ${dinero(cliente.pagoSemanal)}\n✅ Cuotas pagadas: ${cliente.pagado}/${cliente.cuotas}\n\n⚠️ Mora acumulada: ${dinero(data.moraTotal)}\n📉 Balance pendiente: ${dinero(data.pendienteTotal)}\n\n🙏 Gracias por su pago.`;
+    const mensaje = `🧾 *RECIBO DE PAGO*
+
+👤 Cliente: ${cliente.nombre}
+📞 Teléfono: ${cliente.telefono}
+
+💰 Monto prestado: ${dinero(cliente.monto)}
+📊 Total del préstamo: ${dinero(cliente.total)}
+💵 Valor de cuota: ${dinero(cliente.pagoSemanal)}
+✅ Cuotas pagadas: ${cliente.pagado}/${cliente.cuotas}
+
+⚠️ Mora acumulada: ${dinero(data.moraTotal)}
+📉 Balance pendiente: ${dinero(data.pendienteTotal)}
+
+🙏 Gracias por su pago.`;
     abrirWhatsApp(cliente.telefono, mensaje);
   };
 
@@ -232,6 +319,43 @@ function App() {
     );
   }
 
+  if (verPapelera) {
+    return (
+      <div className="app">
+        <header className="header">
+          <div>
+            <h1>🗑️ Papelera de préstamos</h1>
+            <p>Aquí puedes recuperar préstamos eliminados por error.</p>
+          </div>
+          <button className="salir" onClick={() => setVerPapelera(false)}>Volver</button>
+        </header>
+
+        {papelera.length > 0 && <button className="rojoBtn" onClick={vaciarPapelera}>Vaciar papelera</button>}
+
+        {papelera.length === 0 && (
+          <section className="card">
+            <h2>Papelera vacía</h2>
+            <p>No hay préstamos eliminados.</p>
+          </section>
+        )}
+
+        {papelera.map(cliente => (
+          <section key={cliente.id} className="card cliente">
+            <h2>{cliente.nombre}</h2>
+            <p>📞 {cliente.telefono}</p>
+            <p>Monto prestado: <b>{dinero(cliente.monto)}</b></p>
+            <p>Total del préstamo: <b>{dinero(cliente.total)}</b></p>
+            <p>Eliminado: <b>{cliente.eliminadoEn ? new Date(cliente.eliminadoEn).toLocaleString("es-DO") : "No disponible"}</b></p>
+            <button className="verdeBtn" onClick={() => restaurarPrestamo(cliente.id)}>Restaurar préstamo</button>
+            <button className="rojoBtn" onClick={() => borrarDefinitivo(cliente.id)}>Borrar definitivamente</button>
+          </section>
+        ))}
+
+        <style>{estilos}</style>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -239,7 +363,10 @@ function App() {
           <h1>Préstamo Fácil PRO</h1>
           <p>Control de préstamos, cuotas, mora automática y WhatsApp.</p>
         </div>
-        <button className="salir" onClick={salir}>Salir</button>
+        <div className="headerBtns">
+          <button className="papeleraBtn" onClick={() => setVerPapelera(true)}>Papelera ({papelera.length})</button>
+          <button className="salir" onClick={salir}>Salir</button>
+        </div>
       </header>
 
       {(resumen.pagosHoy > 0 || resumen.atrasados > 0) && (
@@ -253,18 +380,15 @@ function App() {
       {pagosHoy.length > 0 && (
         <section className="card">
           <h2>⏰ Pagos de hoy</h2>
-          {pagosHoy.map(c => {
-            const data = calcular(c);
-            return (
-              <div key={c.id} className="miniFila">
-                <div>
-                  <b>{c.nombre}</b>
-                  <p>{dinero(c.pagoSemanal)} vence hoy</p>
-                </div>
-                <button className="verdeBtn miniBtn" onClick={() => enviarRecordatorioHoy(c)}>Recordar</button>
+          {pagosHoy.map(c => (
+            <div key={c.id} className="miniFila">
+              <div>
+                <b>{c.nombre}</b>
+                <p>{dinero(c.pagoSemanal)} vence hoy</p>
               </div>
-            );
-          })}
+              <button className="verdeBtn miniBtn" onClick={() => enviarRecordatorioHoy(c)}>Recordar</button>
+            </div>
+          ))}
         </section>
       )}
 
@@ -362,7 +486,7 @@ function App() {
             <button onClick={() => enviarRecordatorioHoy(cliente)} className="verdeBtn">Recordatorio por WhatsApp</button>
             <button onClick={() => enviarCobro(cliente)} className="azulBtn">Cobrar por WhatsApp</button>
             <button onClick={() => enviarRecibo(cliente)} className="azulBtn">Enviar recibo por WhatsApp</button>
-            <button onClick={() => eliminar(cliente.id)} className="rojoBtn">Eliminar préstamo</button>
+            <button onClick={() => enviarAPapelera(cliente.id)} className="rojoBtn">Mover a papelera</button>
           </section>
         );
       })}
@@ -388,7 +512,9 @@ const estilos = `
   .header { background: linear-gradient(135deg, #7f1d1d, #111827); color: white; padding: 20px; border-radius: 22px; margin-bottom: 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
   .header h1 { margin: 0; font-size: 26px; }
   .header p { margin: 6px 0 0; color: #e5e7eb; }
-  .salir { width: auto; padding: 9px 13px; background: #334155; margin-top: 0; }
+  .headerBtns { display: flex; flex-direction: column; gap: 8px; }
+  .salir, .papeleraBtn { width: auto; padding: 9px 13px; background: #334155; margin-top: 0; }
+  .papeleraBtn { background: #92400e; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .box, .card { background: white; border-radius: 18px; padding: 14px; box-shadow: 0 1px 5px rgba(0,0,0,.08); }
   .box small { color: #64748b; }
@@ -425,6 +551,7 @@ const estilos = `
   @media (min-width: 700px) {
     .app { max-width: 900px; margin: auto; }
     .grid { grid-template-columns: repeat(3, 1fr); }
+    .headerBtns { flex-direction: row; }
   }
 `;
 
