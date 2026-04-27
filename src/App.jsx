@@ -1,4 +1,4 @@
-from pathlib import Path
+import React, { useEffect, useMemo, useState } from "react";
 
 app_code = r'''import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
