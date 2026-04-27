@@ -255,6 +255,26 @@ function App() {
     }
   };
 
+  const compartirApp = async () => {
+    const link = window.location.href;
+    const texto = `📲 Usa ${config.nombreApp}: ${link}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: config.nombreApp,
+          text: texto,
+          url: link
+        });
+      } catch (error) {
+        console.log("Compartir cancelado", error);
+      }
+    } else {
+      navigator.clipboard.writeText(link);
+      alert("Link copiado. Ahora puedes pegarlo en WhatsApp.");
+    }
+  };
+
   const abrirWhatsApp = (telefono, mensaje) => {
     let tel = String(telefono || "").replace(/\D/g, "");
     if (tel.length === 10 && !tel.startsWith("1")) tel = "1" + tel;
@@ -398,6 +418,7 @@ Favor realizar su pago. Gracias.`;
           <p>Control de préstamos, cuotas, mora automática y WhatsApp.</p>
         </div>
         <div className="headerBtns">
+          <button className="papeleraBtn" onClick={() => compartirApp()}>Compartir app</button>
           <button className="papeleraBtn" onClick={() => setVerPapelera(true)}>Papelera ({papelera.length})</button>
           <div className="headerBtns">
           <button className="configBtn" onClick={() => setMostrarConfig(!mostrarConfig)}>Config</button>
