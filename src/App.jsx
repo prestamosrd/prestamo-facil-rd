@@ -706,4 +706,3 @@ button{width:100%;padding:13px;border:0;border-radius:13px;margin-top:8px;backgr
 `;
 
 createRoot(document.getElementById("root")).render(<App />);
-
