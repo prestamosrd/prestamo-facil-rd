@@ -546,7 +546,8 @@ Favor realizar su pago. Gracias.`;
         <Box titulo="Pendiente" valor={dinero(resumen.pendiente)} />
       </section>}
 
-      {!suscripcionVencida() && <section className="card">
+      {!suscripcionVencida() && (
+        <section className="card">
         <h2>Nuevo préstamo</h2>
 
         <label>Nombre del cliente</label>
@@ -583,17 +584,20 @@ Favor realizar su pago. Gracias.`;
         </div>
 
         <button onClick={guardarPrestamo}>Guardar préstamo</button>
-      </section>}
+      </section>
+      )}
 
-      {!suscripcionVencida() && <div className="accionesTop">
-        <button className="verdeBtn" onClick={compartirApp}>Compartir app</button>
-        <button className="gris" onClick={cargarTodo}>Actualizar nube</button>
-        <button className="azulBtn" onClick={() => setVerPapelera(true)}>Papelera ({papelera.length})</button>
-      </div>
+      {!suscripcionVencida() && (
+        <div className="accionesTop">
+          <button className="verdeBtn" onClick={compartirApp}>Compartir app</button>
+          <button className="gris" onClick={cargarTodo}>Actualizar nube</button>
+          <button className="azulBtn" onClick={() => setVerPapelera(true)}>Papelera ({papelera.length})</button>
+        </div>
+      )}
 
-      </div>}
-
-      {!suscripcionVencida() && <input className="buscar" placeholder="Buscar cliente, teléfono o cédula" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+      {!suscripcionVencida() && (
+        <input className="buscar" placeholder="Buscar cliente, teléfono o cédula" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+      )}
 
       {!suscripcionVencida() && clientesFiltrados.map((cliente) => {
         const data = calcular(cliente);
@@ -706,3 +710,4 @@ button{width:100%;padding:13px;border:0;border-radius:13px;margin-top:8px;backgr
 `;
 
 createRoot(document.getElementById("root")).render(<App />);
+
