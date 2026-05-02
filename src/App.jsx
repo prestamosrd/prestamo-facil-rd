@@ -26,7 +26,9 @@ const db = getFirestore(appFirebase);
 
 const CONFIG_DEFAULT = {
   nombreApp: "Préstamos E & F",
-  clave: "1234"
+  clave: "1234",
+  telefonoAdmin: "8090000000",
+  fechaVencimiento: "2026-12-31"
 };
 
 function App() {
@@ -160,17 +162,41 @@ function App() {
   const guardarConfiguracion = () => {
     const nombreFinal = nuevoNombreApp.trim() || config.nombreApp;
     const claveFinal = nuevaClave.trim() || config.clave;
+    const telefonoFinal = (document.getElementById("telefonoAdminInput")?.value || config.telefonoAdmin || "8090000000").trim();
+    const vencimientoFinal = document.getElementById("fechaVencimientoInput")?.value || config.fechaVencimiento || "2026-12-31";
 
     if (claveFinal.length < 4) {
       alert("La contraseña debe tener mínimo 4 caracteres.");
       return;
     }
 
-    setConfig({ nombreApp: nombreFinal, clave: claveFinal });
+    setConfig({
+      nombreApp: nombreFinal,
+      clave: claveFinal,
+      telefonoAdmin: telefonoFinal,
+      fechaVencimiento: vencimientoFinal
+    });
     setNuevoNombreApp("");
     setNuevaClave("");
     setMostrarConfig(false);
     alert("Configuración guardada.");
+  };
+
+  const suscripcionVencida = () => {
+    const vencimiento = config.fechaVencimiento || "2026-12-31";
+    return hoyISO() > vencimiento;
+  };
+
+  const diasRestantesSuscripcion = () => {
+    const vencimiento = config.fechaVencimiento || "2026-12-31";
+    return diasEntre(hoyISO(), vencimiento);
+  };
+
+  const contactarAdminSuscripcion = () => {
+    let tel = String(config.telefonoAdmin || "8090000000").replace(/\D/g, "");
+    if (tel.length === 10 && !tel.startsWith("1")) tel = "1" + tel;
+    const mensaje = `Hola, quiero renovar mi suscripción de ${config.nombreApp}.`;
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`, "_blank");
   };
 
   const guardarPrestamo = async () => {
@@ -445,6 +471,13 @@ Favor realizar su pago. Gracias.`;
         </div>
       </header>
 
+      <section className={suscripcionVencida() ? "suscripcion vencida" : "suscripcion activa"}>
+        <h2>{suscripcionVencida() ? "🚫 Suscripción vencida" : "✅ Suscripción activa"}</h2>
+        <p>Vence: <b>{config.fechaVencimiento || "2026-12-31"}</b></p>
+        {!suscripcionVencida() && <p>Días restantes: <b>{diasRestantesSuscripcion()}</b></p>}
+        {suscripcionVencida() && <button className="verdeBtn" onClick={contactarAdminSuscripcion}>Renovar por WhatsApp</button>}
+      </section>
+
       {mostrarConfig && (
         <section className="card">
           <h2>⚙️ Configuración</h2>
@@ -452,12 +485,18 @@ Favor realizar su pago. Gracias.`;
           <input placeholder={config.nombreApp} value={nuevoNombreApp} onChange={(e) => setNuevoNombreApp(e.target.value)} />
           <label>Nueva contraseña</label>
           <input type="password" placeholder="Mínimo 4 caracteres" value={nuevaClave} onChange={(e) => setNuevaClave(e.target.value)} />
+          <label>Teléfono del administrador para renovaciones</label>
+          <input id="telefonoAdminInput" placeholder={config.telefonoAdmin || "8090000000"} defaultValue={config.telefonoAdmin || ""} />
+          <label>Fecha de vencimiento de la suscripción</label>
+          <input id="fechaVencimientoInput" type="date" defaultValue={config.fechaVencimiento || "2026-12-31"} />
           <button onClick={guardarConfiguracion}>Guardar configuración</button>
           <p className="nota">Si dejas un campo vacío, se conserva el valor actual.</p>
         </section>
       )}
 
-      {(resumen.pagosHoy > 0 || resumen.atrasados > 0) && (
+      {suscripcionVencida() && <section className="card"><h2>Acceso bloqueado</h2><p>La suscripción está vencida. Renueva para volver a crear préstamos, cobrar y enviar recibos.</p></section>}
+
+      {!suscripcionVencida() && (resumen.pagosHoy > 0 || resumen.atrasados > 0) && (
         <section className="alerta">
           <h2>🔔 Alertas</h2>
           <p>Pagos de hoy: <b>{resumen.pagosHoy}</b></p>
@@ -465,7 +504,7 @@ Favor realizar su pago. Gracias.`;
         </section>
       )}
 
-      {pagosHoy.length > 0 && (
+      {!suscripcionVencida() && pagosHoy.length > 0 && (
         <section className="card">
           <h2>⏰ Pagos de hoy</h2>
           {pagosHoy.map((c) => (
@@ -480,7 +519,7 @@ Favor realizar su pago. Gracias.`;
         </section>
       )}
 
-      {atrasados.length > 0 && (
+      {!suscripcionVencida() && atrasados.length > 0 && (
         <section className="card atrasosBox">
           <h2>🚨 Clientes atrasados</h2>
           {atrasados.map((c) => {
@@ -498,16 +537,16 @@ Favor realizar su pago. Gracias.`;
         </section>
       )}
 
-      <section className="grid resumen">
+      {!suscripcionVencida() && <section className="grid resumen">
         <Box titulo="Clientes" valor={clientes.length} />
         <Box titulo="Pagos hoy" valor={resumen.pagosHoy} />
         <Box titulo="Prestado" valor={dinero(resumen.prestado)} />
         <Box titulo="Pagado" valor={dinero(resumen.pagado)} />
         <Box titulo="Mora" valor={dinero(resumen.mora)} />
         <Box titulo="Pendiente" valor={dinero(resumen.pendiente)} />
-      </section>
+      </section>}
 
-      <section className="card">
+      {!suscripcionVencida() && <section className="card">
         <h2>Nuevo préstamo</h2>
 
         <label>Nombre del cliente</label>
@@ -544,17 +583,19 @@ Favor realizar su pago. Gracias.`;
         </div>
 
         <button onClick={guardarPrestamo}>Guardar préstamo</button>
-      </section>
+      </section>}
 
-      <div className="accionesTop">
+      {!suscripcionVencida() && <div className="accionesTop">
         <button className="verdeBtn" onClick={compartirApp}>Compartir app</button>
         <button className="gris" onClick={cargarTodo}>Actualizar nube</button>
         <button className="azulBtn" onClick={() => setVerPapelera(true)}>Papelera ({papelera.length})</button>
       </div>
 
-      <input className="buscar" placeholder="Buscar cliente, teléfono o cédula" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+      </div>}
 
-      {clientesFiltrados.map((cliente) => {
+      {!suscripcionVencida() && <input className="buscar" placeholder="Buscar cliente, teléfono o cédula" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+
+      {!suscripcionVencida() && clientesFiltrados.map((cliente) => {
         const data = calcular(cliente);
         const estado = data.pendienteTotal <= 0 ? "Saldado" : data.cuotasAtrasadas > 0 ? "Atrasado" : data.pagaHoy ? "Pago hoy" : "Al día";
 
@@ -648,6 +689,11 @@ button{width:100%;padding:13px;border:0;border-radius:13px;margin-top:8px;backgr
 .rojo{background:#dc2626}
 .amarillo{background:#ca8a04}
 .nota{color:#64748b;font-size:13px;margin-bottom:0}
+.suscripcion{padding:14px;border-radius:18px;margin-bottom:14px;box-shadow:0 1px 5px rgba(0,0,0,.08)}
+.suscripcion h2{margin:0 0 6px}
+.suscripcion p{margin:5px 0}
+.suscripcion.activa{background:#ecfdf5;border:1px solid #86efac}
+.suscripcion.vencida{background:#fef2f2;border:1px solid #fecaca}
 .loginPage{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f172a;padding:20px;font-family:Arial,sans-serif}
 .loginBox{background:white;max-width:420px;width:100%;padding:22px;border-radius:22px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .loginBox h1{margin-top:0}
